@@ -18,25 +18,24 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 
+import asyncio
 import logging
 import time
 import traceback
-import threading
 import pexpect
 from pdudaemon.drivers.driver import PDUDriver
 import pdudaemon.drivers.strategies  # pylint: disable=W0611
 
 
-class PDURunner(threading.Thread):
+class PDURunner:
 
-    def __init__(self, config, hostname, task_queue, retries):
-        super(PDURunner, self).__init__(name=hostname)
+    def __init__(self, config, hostname, retries):
         self.config = config
         self.hostname = hostname
-        self.task_queue = task_queue
         self.retries = retries
         self.logger = logging.getLogger("pdud.pdu.%s" % hostname)
         self.driver = self.driver_from_hostname(hostname)
+        self.lock = asyncio.Lock()
 
     def driver_from_hostname(self, hostname):
         drivername = self.config['driver']
@@ -58,16 +57,9 @@ class PDURunner(threading.Thread):
                 continue
         return False
 
-    def run(self):
-        self.logger.info("Starting a PDURunner for PDU: %s", self.hostname)
-        while 1:
-            job = self.task_queue.get()
-            if job is None:
-                self.logger.info("leaving")
-                self.task_queue.task_done()
-                return 0
-            port, request = job
+    async def do_job_async(self, port, request):
+        loop = asyncio.get_running_loop()
+        async with self.lock:
             self.logger.info("Processing task (%s %s)", request, port)
-            result = self.do_job(port, request)
-            self.task_queue.task_done()
-        return 0
+            result = await loop.run_in_executor(None, self.do_job, port, request)
+            return result

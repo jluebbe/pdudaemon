@@ -17,8 +17,8 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 
+import asyncio
 import logging
-import time
 logger = logging.getLogger('pdud.listener')
 
 
@@ -34,7 +34,6 @@ def parse_tcp(data):
     args = Args()
     delay = None
     array = data.split(" ")
-    now = int(time.time())
     if (len(array) < 3) or (len(array) > 4):
         logger.info("Wrong data size")
         raise Exception("Unexpected data")
@@ -66,7 +65,7 @@ def parse_http(data, path):
     return args
 
 
-def process_request(args, config, db_queue):
+async def process_request(args, config, runners):
     if args.delay:
         logger.debug("using custom delay as requested")
     else:
@@ -93,12 +92,14 @@ def process_request(args, config, db_queue):
     if not (args.request in ["reboot", "on", "off"]):
         logger.info("Unknown request: %s", args.request)
         return False
-    now = time.time()
+    runner = runners[args.hostname]
     if args.request == "reboot":
         logger.debug("reboot requested, submitting off/on")
-        db_queue.put(("CREATE", args.hostname, args.port, "off", now))
-        db_queue.put(("CREATE", args.hostname, args.port, "on", now + int(args.delay)))
+        await runner.do_job_async(int(args.port), "off")
+        await asyncio.sleep(int(args.delay))
+        await runner.do_job_async(int(args.port), "on")
         return True
     else:
-        db_queue.put(("CREATE", args.hostname, args.port, args.request, now + int(args.delay)))
+        await asyncio.sleep(int(args.delay))
+        await runner.do_job_async(int(args.port), args.request)
         return True
