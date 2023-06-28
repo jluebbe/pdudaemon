@@ -7,6 +7,7 @@ ENV https_proxy ${HTTP_PROXY}
 RUN apt-get update && apt-get install -y \
 curl \
 cython3 \
+git \
 ipmitool \
 libffi-dev \
 libhidapi-dev \
@@ -30,6 +31,8 @@ WORKDIR /pdudaemon
 COPY . .
 RUN pip3 install --user pycodestyle==2.9.1
 RUN pip3 install --user pre-commit
+# pre-commit needs this, to be able to list git files
+RUN git config --global --add safe.directory "*"
 RUN pip3 install .
 RUN pip3 install --user .[test]
 CMD ["/usr/bin/supervisord", "-c", "/pdudaemon/share/supervisord.conf"]
